@@ -110,6 +110,7 @@ module WebHDFS
       res = operate_requests('GET', path, 'LISTSTATUS', options)
       check_success_json(res, 'FileStatuses')['FileStatus']
     end
+    OPT_TABLE['LISTSTATUS'] = ['filter']
     alias :liststatus :list
 
     # curl -i "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=GETCONTENTSUMMARY"
