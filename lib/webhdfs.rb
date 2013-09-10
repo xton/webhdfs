@@ -39,8 +39,8 @@ if $0 == __FILE__
   # $stderr.puts "WILL: #{verb} #{path} #{cmds.inspect} #{opt.inspect}"
 
   if verb == 'resolve_glob'
-    client.resolve_glob(path, *args, opt) do |path|
-      puts path
+    client.resolve_glob(path, *args, opt) do |sub_path|
+      puts sub_path
     end
     exit
   end
