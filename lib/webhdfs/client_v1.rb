@@ -200,11 +200,15 @@ module WebHDFS
         begin
           out = list File.join(pre_filter), 'filter' => filter_string
           out.flat_map do |f|
-            resolve_glob File.join(*pre_filter,f['pathSuffix'],*post_filter), &p
+            resolve_glob File.join(*pre_filter,f['pathSuffix'],*post_filter), :leaf_glob => post_filter.empty?, &p
           end
         rescue WebHDFS::FileNotFoundError => e
           []
         end
+      elsif opt[:leaf_glob]
+        # this came directly from a list
+        block_given? and yield path
+        [path]
       else
         begin
           out = list(path)
