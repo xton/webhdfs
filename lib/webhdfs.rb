@@ -36,17 +36,27 @@ if $0 == __FILE__
   path ||= '.'
   path = "/user/#{config['test_user']}/" + path unless path =~ %r[^/]
 
-  $stderr.puts "WILL: #{verb} #{path} #{cmds.inspect} #{opt.inspect}"
+  # $stderr.puts "WILL: #{verb} #{path} #{cmds.inspect} #{opt.inspect}"
 
-  out = client.send(verb, path, *args, opt)
-
-  if verb == 'list'
-    out.each do |r|
-      puts "#{r['pathSuffix']}#{r['type'] == 'DIRECTORY' ? '/' : ''}"
+  if verb == 'resolve_glob'
+    client.resolve_glob(path, *args, opt) do |path|
+      puts path
     end
-  elsif verb == 'read'
-    puts out
-  else
-    pp out
+    exit
   end
+
+  client.resolve_glob(path) do |final_path|
+    out = client.send(verb, final_path, *args, opt)
+
+    if verb == 'list'
+      out.each do |r|
+        puts "#{r['pathSuffix']}#{r['type'] == 'DIRECTORY' ? '/' : ''}"
+      end
+    elsif verb == 'read'
+      print out
+    else
+      pp out
+    end
+  end
+
 end

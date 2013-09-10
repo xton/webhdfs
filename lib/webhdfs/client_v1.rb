@@ -185,6 +185,38 @@ module WebHDFS
     OPT_TABLE['SETTIMES'] = ['modificationtime', 'accesstime']
     alias :settimes :touch
 
+    # give glob, returns all paths which match.
+    def resolve_glob path, opt = {}, &p
+      components = path.split(File::SEPARATOR).map {|x| x=="" ? File::SEPARATOR : x}
+
+      first_glob_index = components.index do |comp|
+        comp =~ /(?<!\\)[\{\}\[\]\*\?]/
+      end
+
+      if first_glob_index
+        pre_filter = components[0...first_glob_index]
+        filter_string = components[first_glob_index]
+        post_filter = components[(first_glob_index+1) .. -1]
+        begin
+          out = list File.join(pre_filter), 'filter' => filter_string
+          out.flat_map do |f|
+            resolve_glob File.join(*pre_filter,f['pathSuffix'],*post_filter), &p
+          end
+        rescue WebHDFS::FileNotFoundError => e
+          []
+        end
+      else
+        begin
+          out = list(path)
+          out.empty? and raise WebHDFS::FileNotFoundError
+          block_given? and yield path
+          [path]
+        rescue WebHDFS::FileNotFoundError, WebHDFS::ServerError => e
+          []
+        end
+      end
+    end
+
     # def delegation_token(user, options={}) # GETDELEGATIONTOKEN
     #   raise NotImplementedError
     # end
