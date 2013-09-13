@@ -29,6 +29,7 @@ if $0 == __FILE__
     'mv' => 'rename',
     'rm' => 'delete',
     'cat' => 'read',
+    'glob' => 'resolve_glob',
   }
 
   verb = verb_aliases[verb] || verb
@@ -37,13 +38,6 @@ if $0 == __FILE__
   path = "/user/#{config['test_user']}/" + path unless path =~ %r[^/]
 
   # $stderr.puts "WILL: #{verb} #{path} #{cmds.inspect} #{opt.inspect}"
-
-  if verb == 'resolve_glob'
-    client.resolve_glob(path, *args, opt) do |sub_path|
-      puts sub_path
-    end
-    exit
-  end
 
   # give glob, returns all paths which match.
   def client.resolve_glob path, opt = {}, &p
@@ -81,17 +75,30 @@ if $0 == __FILE__
     end
   end
 
-  client.resolve_glob(path) do |final_path|
-    out = client.send(verb, final_path, *args, opt)
+  if verb == 'resolve_glob'
+    client.resolve_glob(path, *args, opt) do |sub_path|
+      puts sub_path
+    end
+    exit
+  end
 
-    if verb == 'list'
-      out.each do |r|
-        puts "#{r['pathSuffix']}#{r['type'] == 'DIRECTORY' ? '/' : ''}"
+  client.resolve_glob(path) do |final_path|
+    if verb == 'read'
+      client.send(verb, final_path, *args, opt) do |chunk|
+        print chunk
       end
-    elsif verb == 'read'
-      print out
     else
-      pp out
+      out = client.send(verb, final_path, *args, opt)
+
+      if verb == 'list'
+        out.each do |r|
+          puts "#{r['pathSuffix']}#{r['type'] == 'DIRECTORY' ? '/' : ''}"
+        end
+      elsif verb == 'read'
+        print out
+      else
+        pp out
+      end
     end
   end
 

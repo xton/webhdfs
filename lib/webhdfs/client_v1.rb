@@ -60,13 +60,28 @@ module WebHDFS
 
     # curl -i -L "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=OPEN
     #                [&offset=<LONG>][&length=<LONG>][&buffersize=<INT>]"
-    def read(path, options={})
+    def read(path, options={}, &p)
       check_options(options, OPT_TABLE['OPEN'])
-      res = operate_requests('GET', path, 'OPEN', options)
-      res.body
+      if block_given?
+        operate_requests('GET', path, 'OPEN', options, &p)
+      else
+        res = operate_requests('GET', path, 'OPEN', options)
+        res.body
+      end
     end
     OPT_TABLE['OPEN'] = ['offset', 'length', 'buffersize']
     alias :open :read
+
+    # Just returns the URI to fetch the given resource
+    def read_uri(path, options = {})
+      if @httpfs_mode
+        check_options(options, OPT_TABLE['OPEN'])
+        path, query = *build_path(path, 'OPEN', options).split("?")
+        URI::HTTP.build(:host => @host, :port => @port, :path => path, :query => query)
+      else
+        raise WebHDFS::ClientError, "read_uri only supported for httpfs"
+      end
+    end
 
     # curl -i -X PUT "http://<HOST>:<PORT>/<PATH>?op=MKDIRS[&permission=<OCTAL>]"
     def mkdir(path, options={})
@@ -227,7 +242,7 @@ module WebHDFS
     end
 
     REDIRECTED_OPERATIONS = ['APPEND', 'CREATE', 'OPEN', 'GETFILECHECKSUM']
-    def operate_requests(method, path, op, params={}, payload=nil)
+    def operate_requests(method, path, op, params={}, payload=nil, &p)
       if not @httpfs_mode and REDIRECTED_OPERATIONS.include?(op)
         res = request(@host, @port, method, path, op, params, nil)
         unless res.is_a?(Net::HTTPRedirection) and res['location']
@@ -243,9 +258,9 @@ module WebHDFS
         request(uri.host, uri.port, method, rpath, nil, {}, payload, {'Content-Type' => 'application/octet-stream'})
       else
         if @httpfs_mode and not payload.nil?
-          request(@host, @port, method, path, op, params, payload, {'Content-Type' => 'application/octet-stream'})
+          request(@host, @port, method, path, op, params, payload, {'Content-Type' => 'application/octet-stream'}, &p)
         else
-          request(@host, @port, method, path, op, params, payload)
+          request(@host, @port, method, path, op, params, payload, &p)
         end
       end
     end
@@ -256,20 +271,33 @@ module WebHDFS
     # IOException                   403 Forbidden
     # FileNotFoundException         404 Not Found
     # RumtimeException              500 Internal Server Error
-    def request(host, port, method, path, op=nil, params={}, payload=nil, header=nil, retries=0)
-      conn = Net::HTTP.new(host, port, @proxy_address, @proxy_port)
-      conn.proxy_user = @proxy_user if @proxy_user
-      conn.proxy_pass = @proxy_pass if @proxy_pass
-      conn.open_timeout = @open_timeout if @open_timeout
-      conn.read_timeout = @read_timeout if @read_timeout
-
+    def request(host, port, method, path, op=nil, params={}, payload=nil, header=nil, retries=0, &p)
+      res = nil
       request_path = if op
                        build_path(path, op, params)
                      else
                        path
                      end
 
-      res = conn.send_request(method, request_path, payload, header)
+      if block_given?
+
+        Net::HTTP.start(host, port) do |http|
+          request = Net::HTTP::Get.new request_path
+          http.request request do |response|
+            res = response # er.. is that going to be valid?
+            response.read_body(&p)
+          end
+        end
+
+      else
+        conn = Net::HTTP.new(host, port, @proxy_address, @proxy_port)
+        conn.proxy_user = @proxy_user if @proxy_user
+        conn.proxy_pass = @proxy_pass if @proxy_pass
+        conn.open_timeout = @open_timeout if @open_timeout
+        conn.read_timeout = @read_timeout if @read_timeout
+
+        res = conn.send_request(method, request_path, payload, header)
+      end
 
       case res
       when Net::HTTPSuccess
