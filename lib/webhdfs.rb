@@ -82,6 +82,36 @@ if $0 == __FILE__
     exit
   end
 
+  if verb == 'write'
+    client.create(path,STDIN.read)
+    exit
+  end
+
+  if verb == 'put'
+    dst, *srcs = ARGV[1..-1].reverse
+    dst = "/user/#{config['test_user']}/" + dst unless dst =~ %r[^/]
+
+    dst_is_dir = ( client.stat(dst)['type'] == 'DIRECTORY' rescue false)
+
+    if !dst_is_dir && srcs.length > 1
+      raise "multi-file put is not targeting a directory! #{dst}"
+    end
+
+    srcs.empty? and raise "empty put!"
+
+    srcs.reverse_each do |src|
+      $stderr.puts "Writing #{src} to #{dst}"
+      if dst_is_dir
+        client.create(File.join(dst,File.basename(src)),File.read(src))
+      else
+        client.create(dst,File.read(src))
+      end
+    end
+    $stderr.puts "Done."    
+    exit
+  end
+
+
   client.resolve_glob(path) do |final_path|
     if verb == 'read'
       client.send(verb, final_path, *args, opt) do |chunk|
